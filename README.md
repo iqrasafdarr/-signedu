@@ -1,58 +1,123 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# SignEdu 🤟
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+**An accessibility-focused e-learning platform that teaches American Sign Language (ASL) through real-time, webcam-based sign recognition.**
 
-## About Laravel
+SignEdu pairs a Laravel web application with a Python computer-vision microservice: a student signs a letter in front of their webcam, and the app tells them — in real time — which letter they signed, how confident it is, and how to improve their hand shape.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+---
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## ✨ Key Features
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+- **Real-time ASL fingerspelling recognition** — captures webcam frames in the browser and classifies the ASL alphabet sign being shown, with a live confidence score and a written description of the correct handshape.
+- **Sample & reference images** — pulls a matching reference image for the detected/selected letter so learners can visually compare their hand shape.
+- **Role-based access control** — separate **Admin** and **Student** roles, enforced via dedicated middleware, so admin-only features (like managing student records) are properly gated.
+- **Student management (CRUD)** — searchable, paginated student directory with create/edit/delete, built on Laravel's validated Form Requests.
+- **Authentication & profiles** — registration, login, password reset, and profile management via Laravel Breeze.
+- **Dashboard** — at-a-glance stats (total students, total users, recently added students) for admins.
 
-## Learning Laravel
+## 🧠 How the Recognition Works
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+The core ML pipeline lives in `python-api/`:
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+1. **Hand landmark extraction** — [MediaPipe Hands](https://developers.google.com/mediapipe) detects a hand in the incoming frame and returns 21 3D landmarks.
+2. **Feature engineering** — each landmark is normalized relative to the wrist (x, y, z offsets), producing a 63-dimensional feature vector that's invariant to the hand's position in the frame.
+3. **Classification** — a **Random Forest** classifier (scikit-learn, 200 estimators) maps that feature vector to one of the 26 ASL alphabet letters.
+4. **Training data** — the model is trained on the [ASL Alphabet dataset](https://www.kaggle.com/datasets/grassknoted/asl-alphabet) (~87K images across 26 classes), sampling per-class images and running them through the same landmark-extraction pipeline used at inference time.
+5. **Serving** — a lightweight Flask API (`app.py`) loads the trained model (`model.pkl`) and exposes `/detect`, `/explain`, `/sample/<letter>`, and `/health` endpoints, called directly from the browser-facing Blade view.
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+This landmark-based approach (rather than classifying raw pixels) keeps the model small and fast enough for real-time, in-browser use.
 
-## Agentic Development
+## 🏗️ Architecture
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
-
-```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+```
+Browser (webcam capture, JS)
+        │  frame (multipart/form-data)
+        ▼
+Flask API  (python-api/app.py)
+  MediaPipe Hands → feature extraction → Random Forest (model.pkl)
+        │  JSON {letter, confidence, description, sample_image}
+        ▼
+Laravel App  (auth, roles, dashboard, student records, views)
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+The Laravel app owns everything web-facing — auth, authorization, UI, and the student-management module — while the Flask service is a focused, single-purpose inference API that keeps the ML code decoupled from the web app.
 
-## Contributing
+## 🛠️ Tech Stack
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+| Layer | Technology |
+|---|---|
+| Backend (web) | PHP 8.3+, Laravel 13, Laravel Breeze |
+| Frontend | Blade, Tailwind CSS, Alpine.js, Vite |
+| ML / computer vision service | Python, Flask, OpenCV, MediaPipe, scikit-learn, Pillow |
+| Database | SQLite (default) / MySQL-compatible via Laravel's query builder |
+| Testing | Pest |
+| Containerization | Docker |
 
-## Code of Conduct
+## 🚀 Getting Started
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+### Prerequisites
+- PHP 8.3+, Composer
+- Node.js & npm
+- Python 3.9+
+- A webcam (for the sign-detector feature)
 
-## Security Vulnerabilities
+### 1. Clone & install the Laravel app
+```bash
+git clone https://github.com/iqrasafdarr/-signedu.git
+cd -signedu
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+composer install
+npm install
 
-## License
+cp .env.example .env
+php artisan key:generate
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+touch database/database.sqlite   # if using SQLite
+php artisan migrate --seed
+
+npm run build      # or `npm run dev` while developing
+php artisan serve
+```
+
+### 2. Set up the ML service
+```bash
+cd python-api
+pip install flask flask-cors opencv-python mediapipe numpy scikit-learn pillow
+
+python app.py       # serves the recognition API on http://127.0.0.1:5000
+```
+
+> To retrain the model on your own copy of the ASL Alphabet dataset, update `DATASET_PATH` in `train.py` / `app.py` and run `python train.py`. This regenerates `model.pkl`.
+
+With both servers running, log in, navigate to **Sign Detector**, allow webcam access, and start signing.
+
+## 📁 Project Structure
+
+```
+├── app/                    # Laravel application code
+│   ├── Http/Controllers/   # Dashboard, Students, SignDetector, Auth
+│   ├── Http/Middleware/    # AdminMiddleware, StudentMiddleware
+│   └── Models/             # User, Student
+├── database/migrations/    # Users, students, roles
+├── resources/views/        # Blade templates (dashboard, students, sign-detector)
+├── python-api/
+│   ├── app.py               # Flask inference API
+│   ├── train.py              # Model training pipeline
+│   └── model.pkl             # Trained Random Forest classifier
+└── routes/web.php           # Application routes
+```
+
+## 🗺️ Roadmap
+
+- [ ] Deploy the Flask service alongside the web app instead of relying on `127.0.0.1:5000` for production use
+- [ ] Expand beyond static fingerspelling to dynamic/word-level signs
+- [ ] Track per-student learning progress over time
+- [ ] Add automated tests for the recognition API
+
+## 📄 License
+
+This project is open-sourced for educational purposes.
+
+## 👤 Author
+
+Built by [Iqra Safdar](https://github.com/iqrasafdarr).
